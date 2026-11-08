@@ -1,8 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from "firebase/auth";
-import { getFirestore } from 'firebase/firestore';
-import { getFunctions } from 'firebase/functions';
-import { connectFunctionsEmulator } from 'firebase/functions';
+import { connectAuthEmulator, getAuth } from "firebase/auth";
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 
 
 const firebaseConfig = {
@@ -20,6 +19,17 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const functions = getFunctions(app);
 
-if (import.meta.env.DEV) {
-    connectFunctionsEmulator(functions, 'localhost', 5001);
-  }
+// Callable functions use the local Functions emulator during `npm run dev`.
+// Auth and Firestore stay on the Vite project (production, if that is what
+// .env points at) unless VITE_USE_FIREBASE_EMULATORS=true. That flag points
+// Auth, Firestore, and Functions at the local emulators together.
+// The emulator project id must be the same as VITE_FIREBASE_PROJECT_ID.
+const useFirebaseEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
+
+if (useFirebaseEmulators) {
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+} else if (import.meta.env.DEV) {
+  connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+}

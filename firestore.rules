@@ -2,16 +2,41 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Only the owner, signed in with a real account (not anonymous), can
-    // read or write their own vocabulary. Everything else is denied.
+    // Email/password and Google set a provider other than "anonymous".
     function isSignedInOwner(uid) {
       return request.auth != null
         && request.auth.uid == uid
         && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
+    // url + title + lastOpenedAt only. lastOpenedAt must be the server time
+    // so a client cannot backdate a visit. The id is the SHA-256 of the url.
+    function isHistoryArticle(articleId) {
+      return articleId.matches('^[a-f0-9]{64}$')
+        && request.resource.data.keys().hasOnly(['url', 'title', 'lastOpenedAt'])
+        && request.resource.data.url is string
+        && request.resource.data.url.size() > 0
+        && request.resource.data.url.size() <= 2000
+        && request.resource.data.url.matches('^https?://\\S+$')
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 300
+        && request.resource.data.lastOpenedAt == request.time;
+    }
+
     match /users/{uid}/vocabulary/{wordId} {
       allow read, write: if isSignedInOwner(uid);
+    }
+
+    match /users/{uid}/history/{articleId} {
+      allow read: if isSignedInOwner(uid);
+
+      allow create: if isSignedInOwner(uid) && isHistoryArticle(articleId);
+
+      allow update: if isSignedInOwner(uid)
+        && isHistoryArticle(articleId)
+        && resource != null
+        && request.resource.data.url == resource.data.url;
     }
   }
 }

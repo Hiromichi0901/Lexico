@@ -1,15 +1,21 @@
-function ArticleCard({ url, title, percentage, words }) {
+function ArticleCard({ url, title, openedLabel, onOpen, disabled }) {
   return (
-    <div className="flex h-36 w-full flex-col items-center justify-center gap-1 rounded-2xl bg-neutral-800 px-4 py-3">
-      <p className="w-full truncate text-center text-sm text-neutral-500" title={url}>
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={disabled}
+      className="flex min-h-36 w-full flex-col items-center justify-center gap-1 rounded-2xl bg-neutral-800 px-4 py-3 text-center text-white transition-colors hover:bg-neutral-700 disabled:cursor-wait disabled:opacity-60"
+    >
+      <p className="w-full truncate text-sm text-neutral-500" title={url}>
         {url}
       </p>
-      <p className="w-full truncate text-center text-lg font-medium" title={title}>
+      <p className="w-full truncate text-lg font-medium" title={title}>
         {title}
       </p>
-      <p className="text-sm text-neutral-500">{percentage}</p>
-      <p className="text-sm text-neutral-500">{words}</p>
-    </div>
+      <p className="w-full truncate text-xs text-neutral-500" title={openedLabel}>
+        {openedLabel}
+      </p>
+    </button>
   );
 }
 

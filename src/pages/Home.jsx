@@ -1,59 +1,71 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { scrapeUrl } from "../services/scraper";
-import CounterCard from "../components/CounterCard";
 import ArticleCard from "../components/ArticleCard";
-
-const articles = [
-  {
-    url: "https://www.bbc.com/news/technology",
-    title: "How AI Is Changing the Way We Read",
-    percentage: "72%",
-    words: 842,
-  },
-  {
-    url: "https://www.theguardian.com/world",
-    title: "A Day in Tokyo's Quiet Neighborhoods",
-    percentage: "45%",
-    words: 1205,
-  },
-  {
-    url: "https://www.nytimes.com/books",
-    title: "Why Short Stories Are Making a Comeback",
-    percentage: "91%",
-    words: 634,
-  },
-  {
-    url: "https://medium.com/productivity",
-    title: "Building Better Reading Habits in 2026",
-    percentage: "58%",
-    words: 978,
-  },
-  {
-    url: "https://www.economist.com/science",
-    title: "The Science of Learning New Vocabulary",
-    percentage: "33%",
-    words: 1540,
-  },
-];
+import { useArticleHistory } from "../hooks/useArticleHistory";
+import { useAuth } from "../hooks/useAuth";
+import {
+  formatLastOpened,
+  historyViewer,
+  isLoadedArticle,
+  normalizeArticleUrl,
+} from "../lib/articleHistory";
+import { saveOpenedArticle } from "../services/articleHistory";
+import { scrapeUrl } from "../services/scraper";
 
 function Home() {
+  const { user } = useAuth();
+  const { articles, status, retry } = useArticleHistory(user);
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const opening = useRef(false);
   const navigate = useNavigate();
 
-  const handleRead = async () => {
-    if(!url) return;
+  const openArticle = async (rawUrl) => {
+    const normalized = normalizeArticleUrl(rawUrl);
+    if (!normalized) {
+      setError("Enter a full http or https link.");
+      return;
+    }
+    if (opening.current) return;
+
+    opening.current = true;
     setLoading(true);
+    setError("");
     try {
-      const article = await scrapeUrl(url);
-      navigate('/reader', { state: {article}});
-    } catch (error) {
-      console.error('Scraping failed:', error);
-    }finally {
+      const scraped = await scrapeUrl(normalized);
+      const article = { ...scraped, url: normalized };
+      if (!isLoadedArticle(article)) {
+        setError("Couldn't open that article.");
+        return;
+      }
+
+      let historySaveFailed = false;
+      if (historyViewer(user).mode === "account") {
+        try {
+          await saveOpenedArticle(user, {
+            url: article.url,
+            title: article.title,
+          });
+        } catch (saveError) {
+          console.error("Saving article history failed:", saveError);
+          historySaveFailed = true;
+        }
+      }
+
+      navigate("/reader", { state: { article, historySaveFailed } });
+    } catch (openError) {
+      console.error("Scraping failed:", openError);
+      setError("Couldn't open that article. Check the link and try again.");
+    } finally {
+      opening.current = false;
       setLoading(false);
     }
+  };
 
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    openArticle(url);
   };
 
   return (
@@ -62,41 +74,100 @@ function Home() {
         <span>Past a link.</span>
         <span>Start reading.</span>
       </h1>
-      <div className="mt-8 w-full max-w-3xl bg-neutral-800 rounded-2xl py-2 px-3 flex items-center gap-2">
-      <input
-        type="text"
-        placeholder="Paste a URL"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        className="flex-1 bg-transparent text-white placeholder-neutral-500 px-2 py-3 text-base outline-none"
-      />
-      <button
-        type="button"
-        onClick={handleRead}
-        disabled={loading}
-        className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-xl font-medium"
+      <form
+        onSubmit={handleSubmit}
+        className="mt-8 w-full max-w-3xl bg-neutral-800 rounded-2xl py-2 px-3 flex items-center gap-2"
       >
-       {loading ? 'loading...' : 'Read →'}
-      </button>
-      </div>
-      <div className="flex gap-2 mt-7">
-        <CounterCard value="19" label="Words Saved" />
-        <CounterCard value="3" label="Articles Read" />
-        <CounterCard value="1" label="days Streak" />
-      </div>
-      <div className="mt-7 grid w-full max-w-3xl grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
-        {articles.map((article) => (
-          <ArticleCard
-            key={article.url}
-            url={article.url}
-            title={article.title}
-            percentage={article.percentage}
-            words={article.words}
-          />
-        ))}
-      </div>
+        <input
+          type="text"
+          placeholder="Paste a URL"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          className="flex-1 bg-transparent text-white placeholder-neutral-500 px-2 py-3 text-base outline-none"
+        />
+        <button
+          type="submit"
+          disabled={loading}
+          className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-xl font-medium disabled:cursor-wait disabled:opacity-60"
+        >
+          {loading ? "loading..." : "Read →"}
+        </button>
+      </form>
+      {error && (
+        <p className="mt-3 w-full max-w-3xl text-sm text-red-400" role="alert">
+          {error}
+        </p>
+      )}
+
+      <section className="mt-7 w-full max-w-3xl">
+        <h2 className="text-sm font-medium text-neutral-500">Recently opened</h2>
+        {status !== "ready" && <HistoryStatus status={status} onRetry={retry} />}
+        {status === "ready" && user?.email && (
+          <p className="mt-1 text-sm text-neutral-500">Saved for {user.email}</p>
+        )}
+        {status === "ready" && articles.length === 0 && (
+          <p className="mt-4 text-sm text-neutral-500">
+            No articles yet. Open a link above and it will show up here.
+          </p>
+        )}
+        {status === "ready" && articles.length > 0 && (
+          <div className="mt-4 grid w-full grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+            {articles.map((article) => (
+              <ArticleCard
+                key={article.id}
+                url={article.url}
+                title={article.title}
+                openedLabel={formatLastOpened(article.lastOpenedAt)}
+                onOpen={() => openArticle(article.url)}
+                disabled={loading}
+              />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
+}
+
+function HistoryStatus({ status, onRetry }) {
+  if (status === "loading") {
+    return <p className="mt-4 text-sm text-neutral-500">Loading your articles…</p>;
+  }
+
+  if (status === "error") {
+    return (
+      <div className="mt-4">
+        <p className="text-sm text-red-400" role="alert">
+          Couldn't load your articles.
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-3 rounded-xl bg-neutral-800 px-4 py-2 text-sm text-white hover:bg-neutral-700"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (status === "anonymous") {
+    return (
+      <p className="mt-4 text-sm text-neutral-500">
+        History is saved for signed-in accounts only. Anonymous reading still works, and nothing is stored.
+      </p>
+    );
+  }
+
+  if (status === "signed-out") {
+    return (
+      <p className="mt-4 text-sm text-neutral-500">
+        Sign in with your account to see articles you've opened.
+      </p>
+    );
+  }
+
+  return null;
 }
 
 export default Home;

@@ -19,6 +19,7 @@ import VocabCard from "../components/VocabCard";
 function Reader() {
   const location = useLocation();
   const article = location.state?.article;
+  const historySaveFailed = location.state?.historySaveFailed === true;
 
 
   const [activeWord, setActiveWord] = useState(null);
@@ -71,12 +72,13 @@ function Reader() {
         </div>
       </header>
 
-      <div className="h-0.5 bg-neutral-800">
-        <div className="h-full w-1/3 bg-emerald-500" />
-      </div>
-
       <div className="mx-auto flex max-w-6xl gap-10 px-12 py-10">
         <div className="min-w-0 flex-1">
+          {historySaveFailed && (
+            <p className="mb-4 text-sm text-amber-400" role="alert">
+              This article is open, but it could not be saved to your history.
+            </p>
+          )}
 
           <div className="mb-8 flex items-center justify-between rounded-xl border border-emerald-900 bg-emerald-950/40 px-4 py-3">
             {/* <p className="text-sm text-emerald-400">
