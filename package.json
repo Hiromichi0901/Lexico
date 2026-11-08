@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node --test test/articleHistory.test.js",
+    "test": "node --test test/articleHistory.test.js test/vocabularyReview.test.js",
     "test:rules": "firebase emulators:exec --only firestore --project demo-lexico \"node --test test/firestore.rules.test.js\""
   },
   "dependencies": {
