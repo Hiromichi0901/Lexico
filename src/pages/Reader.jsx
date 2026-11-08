@@ -104,6 +104,8 @@ function Reader() {
               <VocabCard
                 word={activeWord}
                 sentence={activeSentence}
+                articleUrl={article.url}
+                articleTitle={article.title}
                 onClose={() => setShowVocabCard(false)}
               />
             </div>

@@ -1,4 +1,4 @@
-function WordListItem({ word, result }) { // this forms the word card
+function WordListItem({ word, result, savedLabel, sourceLabel }) { // this forms the word card
   return (
     <li className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
       <div className="flex items-start justify-between gap-4"> {/*word*/}
@@ -23,6 +23,13 @@ function WordListItem({ word, result }) { // this forms the word card
       {word.exampleSentence && (
         <p className="mt-3 text-sm italic leading-relaxed text-neutral-500">
           "{word.exampleSentence}"
+        </p>
+      )}
+      {(sourceLabel || savedLabel) && (
+        <p className="mt-3 text-xs text-neutral-500">
+          {sourceLabel}
+          {sourceLabel && savedLabel ? ' · ' : ''}
+          {savedLabel}
         </p>
       )}
     </li>

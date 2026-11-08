@@ -6,12 +6,33 @@ import { getAllWords } from '../services/vocabulary';
 import Flashcard from '../components/Flashcard';
 import TestResult from '../components/TestResult';
 import WordListItem from '../components/WordListItem';
+import {
+  ALL_ARTICLES,
+  NEWEST_FIRST,
+  NO_ARTICLE,
+  OLDEST_FIRST,
+  articleFilterForAccount,
+  formatSavedAt,
+  labelForSourceArticle,
+  resolveArticleFilter,
+  savedAtOrder,
+  shouldClearVocabularySession,
+  sourceArticleOptions,
+  visibleVocabulary,
+  vocabularyEmptyCopy,
+  vocabularySummary,
+} from '../lib/vocabularyReview';
+
+const filterClass =
+  'mt-2 w-full rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2.5 text-sm text-white focus:border-emerald-600 focus:outline-none';
 
 function Vocabulary() {
   const { user, loading } = useAuth();
   // Tagged with the uid it was loaded for, so switching accounts can't show the
   // previous one's words while the next load is in flight.
   const [loaded, setLoaded] = useState(null);
+  const [savedOrder, setSavedOrder] = useState(NEWEST_FIRST);
+  const [articleSelection, setArticleSelection] = useState(null);
   const {
     status,
     index,
@@ -30,6 +51,17 @@ function Vocabulary() {
   const isCurrentUser = Boolean(loaded) && loaded.uid === user?.uid;
   const words = isCurrentUser ? loaded.words : [];
   const loadingWords = signedIn && !isCurrentUser;
+  const order = savedAtOrder(savedOrder);
+  const articleFilter = resolveArticleFilter(
+    articleFilterForAccount(user?.uid, articleSelection),
+    words,
+  );
+  const articleOptions = sourceArticleOptions(words);
+  const selectedArticle = articleOptions.find((option) => option.value === articleFilter);
+  const sourceLabel = selectedArticle?.label ?? 'this article';
+  const visibleWords = visibleVocabulary(words, { order, source: articleFilter });
+  const summary = vocabularySummary(words.length, visibleWords.length, articleFilter, sourceLabel);
+  const emptyCopy = vocabularyEmptyCopy(words.length, articleFilter, sourceLabel);
 
   useEffect(() => {
     // Anonymous visitors can't have saved anything, so there's nothing to fetch.
@@ -72,6 +104,12 @@ function Vocabulary() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [status, flipped, flip, answer]);
 
+  useEffect(() => {
+    if (shouldClearVocabularySession(status, loaded?.uid ?? null, user?.uid ?? null)) {
+      exit();
+    }
+  }, [status, loaded, user, exit]);
+
   if (loading || loadingWords) {
     return <div className="p-8 text-neutral-400">Loading...</div>;
   }
@@ -107,7 +145,7 @@ function Vocabulary() {
     return (
       <TestResult
         answers={answers}
-        onRetryAll={() => start(words)}
+        onRetryAll={() => start(visibleWords)}
         onRetryWrong={() => start(wrongWords)}
         onExit={exit}
       />
@@ -176,28 +214,65 @@ function Vocabulary() {
       <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold">Vocabulary</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            {words.length} {words.length === 1 ? 'word' : 'words'} saved
-          </p>
+          <p className="mt-1 text-sm text-neutral-500">{summary}</p>
         </div>
         <button
           type="button"
-          onClick={() => start(words)}
-          disabled={words.length === 0}
+          onClick={() => start(visibleWords)}
+          disabled={visibleWords.length === 0}
           className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
         >
           Start flashcard test
         </button>
       </div>
 
-      {words.length === 0 ? (
-        <p className="mt-10 text-sm text-neutral-500">
-          No words yet. Click a word while reading an article to save it here.
-        </p>
+      {words.length > 0 && (
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            Article
+            <select
+              name="article"
+              value={articleFilter}
+              onChange={(event) => {
+                setArticleSelection({ uid: user.uid, source: event.target.value });
+              }}
+              className={filterClass}
+            >
+              <option value={ALL_ARTICLES}>All articles</option>
+              {articleOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+              <option value={NO_ARTICLE}>No article</option>
+            </select>
+          </label>
+          <label className="block text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            Date saved
+            <select
+              name="savedOrder"
+              value={order}
+              onChange={(event) => setSavedOrder(savedAtOrder(event.target.value))}
+              className={filterClass}
+            >
+              <option value={NEWEST_FIRST}>Newest first</option>
+              <option value={OLDEST_FIRST}>Oldest first</option>
+            </select>
+          </label>
+        </div>
+      )}
+
+      {visibleWords.length === 0 ? (
+        <p className="mt-10 text-sm text-neutral-500">{emptyCopy}</p>
       ) : (
         <ul className="mt-8 space-y-3">
-          {words.map((word) => (
-            <WordListItem key={word.id ?? word.word} word={word} />
+          {visibleWords.map((word) => (
+            <WordListItem
+              key={word.id ?? word.word}
+              word={word}
+              savedLabel={formatSavedAt(word.savedAt)}
+              sourceLabel={labelForSourceArticle(word, articleOptions)}
+            />
           ))}
         </ul>
       )}
